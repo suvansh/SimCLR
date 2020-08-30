@@ -45,7 +45,7 @@ def train(net, data_loader, train_optimizer, device):
 
 
 # test for one epoch, use weighted knn to find the most similar images' label to assign the test image
-def test(net, memory_data_loader, test_data_loader):
+def test(net, memory_data_loader, test_data_loader, device):
     net.eval()
     total_top1, total_top5, total_num, feature_bank = 0.0, 0.0, 0, []
     with torch.no_grad():
@@ -95,7 +95,7 @@ if __name__ == '__main__':
     parser.add_argument('--k', default=200, type=int, help='Top k most similar images used to predict the label')
     parser.add_argument('--batch_size', default=64, type=int, help='Number of images in each mini-batch')
     parser.add_argument('--epochs', default=50, type=int, help='Number of sweeps over the dataset to train')
-    parser.add_argument('--device', default='cpu', type=str, help='cpu or cuda')
+    parser.add_argument('--device', default='cuda', type=str, help='cpu for CPU, cuda for GPU')
 
     # args parse
     args = parser.parse_args()
@@ -104,13 +104,13 @@ if __name__ == '__main__':
     device = args.device
 
     # data prepare
-    train_data = utils.CIFAR10Pair(root='data', train=True, transform=utils.train_transform, download=True)
-    train_loader = DataLoader(train_data, batch_size=batch_size, shuffle=True, num_workers=16, pin_memory=True,
+    train_data = utils.CIFAR10Pair(root='data', train=True, transform=utils.train_transform_DIP, download=True)
+    train_loader = DataLoader(train_data, batch_size=batch_size, shuffle=True, num_workers=0, pin_memory=True,
                               drop_last=True)
     memory_data = utils.CIFAR10Pair(root='data', train=True, transform=utils.test_transform, download=True)
-    memory_loader = DataLoader(memory_data, batch_size=batch_size, shuffle=False, num_workers=16, pin_memory=True)
+    memory_loader = DataLoader(memory_data, batch_size=batch_size, shuffle=False, num_workers=0, pin_memory=True)
     test_data = utils.CIFAR10Pair(root='data', train=False, transform=utils.test_transform, download=True)
-    test_loader = DataLoader(test_data, batch_size=batch_size, shuffle=False, num_workers=16, pin_memory=True)
+    test_loader = DataLoader(test_data, batch_size=batch_size, shuffle=False, num_workers=0, pin_memory=True)
 
     # model setup and optimizer config
     model = Model(feature_dim).to(device)
@@ -123,8 +123,8 @@ if __name__ == '__main__':
     # training loop
     results = {'train_loss': [], 'test_acc@1': [], 'test_acc@5': []}
     save_name_pre = '{}_{}_{}_{}_{}'.format(feature_dim, temperature, k, batch_size, epochs)
-    if not os.path.exists('results'):
-        os.mkdir('results')
+    if not os.path.exists('results_dip'):
+        os.mkdir('results_dip')
     best_acc = 0.0
     for epoch in range(1, epochs + 1):
         train_loss = train(model, train_loader, optimizer, device)
@@ -134,7 +134,7 @@ if __name__ == '__main__':
         results['test_acc@5'].append(test_acc_5)
         # save statistics
         data_frame = pd.DataFrame(data=results, index=range(1, epoch + 1))
-        data_frame.to_csv('results/{}_statistics.csv'.format(save_name_pre), index_label='epoch')
+        data_frame.to_csv('results_dip/{}_statistics.csv'.format(save_name_pre), index_label='epoch')
         if test_acc_1 > best_acc:
             best_acc = test_acc_1
-            torch.save(model.state_dict(), 'results/{}_model.pth'.format(save_name_pre))
+            torch.save(model.state_dict(), 'results_dip/{}_model.pth'.format(save_name_pre))
