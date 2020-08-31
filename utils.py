@@ -1,7 +1,10 @@
+import os
+import pickle
+import torch
 from PIL import Image
-from torchvision import transforms
+from DIP.utils.common_utils import torch_to_np, pil_to_np
 from torchvision.datasets import CIFAR10
-from transforms.dip import DIPTransform
+
 
 class CIFAR10Pair(CIFAR10):
     """CIFAR10 Dataset.
@@ -20,24 +23,17 @@ class CIFAR10Pair(CIFAR10):
 
         return pos_1, pos_2, target
 
+def get_repo_dir():
+    return os.path.dirname(__file__)
 
-train_transform = transforms.Compose([
-    transforms.RandomResizedCrop(32),
-    transforms.RandomHorizontalFlip(p=0.5),
-    transforms.RandomApply([transforms.ColorJitter(0.4, 0.4, 0.4, 0.1)], p=0.8),
-    transforms.RandomGrayscale(p=0.2),
-    transforms.ToTensor(),
-    transforms.Normalize([0.4914, 0.4822, 0.4465], [0.2023, 0.1994, 0.2010])
-])
+def image_hash(image):
+    """ Hashes image after subsampling to save time. Returns as str """
+    if isinstance(image, torch.Tensor):
+        image = torch_to_np(image)
+    elif isinstance(image, Image):
+        image = pil_to_np(image)
+    subsampled = image[:, ::4, ::4]
+    hash_ = hash(pickle.dumps(subsampled.tolist()))
+    return str(abs(hash_))
 
-train_transform_DIP = transforms.Compose([
-    transforms.RandomResizedCrop(32),
-    DIPTransform((3, 32, 32), 2000, {30: 0.1, 50: 0.2, 70: 0.4, 90: 0.2, 100: 0.1},
-                 input_noise_std=0.03, plot_every=0, device='cuda'),
-    transforms.ToTensor(),
-    transforms.Normalize([0.4914, 0.4822, 0.4465], [0.2023, 0.1994, 0.2010])
-])
 
-test_transform = transforms.Compose([
-    transforms.ToTensor(),
-    transforms.Normalize([0.4914, 0.4822, 0.4465], [0.2023, 0.1994, 0.2010])])
