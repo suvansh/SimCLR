@@ -31,7 +31,7 @@ class DIPCompute:
         self.iters = sorted(iters)
         self.dataloader = dataloader
         self.save_dir = save_dir
-        self.num_iters = self.iters[-1]
+        self.num_iters = self.iters[-1] + 1  # do 1 more than the max since 0-indexing
         self.image_shape = image_shape
         self.input_depth = input_depth
         self.input_noise_std = input_noise_std
@@ -64,10 +64,7 @@ class DIPCompute:
         os.makedirs(self.cur_save_dir, exist_ok=True)
 
     def save(self, iter_num, np_img):
-        # save the optimization iteration this was produced at
-        with open(os.path.join(self.cur_save_dir, 'iter.txt'), 'w') as f:
-            f.write(f'{iter_num}')
-        with open(os.path.join(self.cur_save_dir, f'{self.iter_idx+1}.npy'), 'wb') as f:
+        with open(os.path.join(self.cur_save_dir, f'{self.iter_idx+1}_{iter_num}.npy'), 'wb') as f:
             np.save(f, np_img)
 
     def run(self, image):
@@ -78,8 +75,6 @@ class DIPCompute:
         net_input_saved = net_input.detach().clone()
         noise = net_input.detach().clone()  # dummy tensor of same shape
         p = get_params(self.opt_over, self.net, net_input)
-        #def local_closure(iter_num):
-        #    self.closure(net_input_saved, image, noise, iter_num)
         lambda_closure = lambda iter_num: self.closure(net_input_saved, image, noise, iter_num)
         optimize(self.optimizer, p, lambda_closure, self.lr, self.num_iters, pass_iter=True)
         transformed = self.net(net_input)
@@ -95,23 +90,13 @@ class DIPCompute:
         if iter_num == self.iters[self.iter_idx]:
             self.save(iter_num, torch_to_np(out))
             self.iter_idx += 1
-        # maybe log loss here?
 
     def run_all(self):
-        import pdb; pdb.set_trace()
         for image, target in tqdm(self.dataloader):
             self.run(image.to(self.device))
 
-#import pdb; pdb.set_trace()
-#trainset = CIFAR10(
-#            root=os.path.join(get_repo_dir(), 'data'), train=True, download=True, transform=train_transform)
-#trainloader = DataLoader(
-#            trainset, batch_size=64, shuffle=True, num_workers=2)
-#for batch in tqdm(trainloader):
-#    pass
-#
 data = CIFAR10(root=os.path.join(get_repo_dir(), 'data'), train=True, download=True, transform=train_transform)
-dataloader = DataLoader(data, batch_size=1, shuffle=False, num_workers=0, pin_memory=True, drop_last=True)
+dataloader = DataLoader(data, batch_size=1, shuffle=False, num_workers=4, pin_memory=True, drop_last=True)
 save_dir = os.path.join(get_repo_dir(), 'data/transforms')
 iters = list(range(20, 201, 10)) + list(range(300, 1001, 50)) + list(range(1100, 1601, 100))
 
