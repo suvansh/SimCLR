@@ -36,4 +36,14 @@ def image_hash(image):
     hash_ = hash(pickle.dumps(subsampled.tolist()))
     return str(abs(hash_))
 
+def chunk(data, parts):
+    divided = [None] * parts
+    n = len(data) // parts
+    extras = len(data) - n * parts
+    prev = 0
+    for i in range(parts):
+        nxt = prev + n + int(i < extras)
+        divided[i] = data[prev:nxt]
+        prev = nxt
+    return divided
 
