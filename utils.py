@@ -27,11 +27,11 @@ def get_repo_dir():
     return os.path.dirname(__file__)
 
 def image_hash(image):
-    """ Hashes image after subsampling to save time. Returns as str """
+    """ Hashes torch or np image after subsampling to save time. Returns as str """
     if isinstance(image, torch.Tensor):
+        if len(image.shape) == 3:
+            image = torch.unsqueeze(image, 0)
         image = torch_to_np(image)
-    elif isinstance(image, Image):
-        image = pil_to_np(image)
     subsampled = image[:, ::4, ::4]
     hash_ = hash(pickle.dumps(subsampled.tolist()))
     return str(abs(hash_))

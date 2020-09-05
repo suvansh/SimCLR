@@ -7,8 +7,8 @@ import torch.optim as optim
 from thop import profile, clever_format
 from torch.utils.data import DataLoader
 from tqdm import tqdm
-
 import utils
+import data_transforms
 from model import Model
 
 
@@ -45,7 +45,7 @@ def train(net, data_loader, train_optimizer, device):
 
 
 # test for one epoch, use weighted knn to find the most similar images' label to assign the test image
-def test(net, memory_data_loader, test_data_loader):
+def test(net, memory_data_loader, test_data_loader, device):
     net.eval()
     total_top1, total_top5, total_num, feature_bank = 0.0, 0.0, 0, []
     with torch.no_grad():
@@ -95,7 +95,7 @@ if __name__ == '__main__':
     parser.add_argument('--k', default=200, type=int, help='Top k most similar images used to predict the label')
     parser.add_argument('--batch_size', default=64, type=int, help='Number of images in each mini-batch')
     parser.add_argument('--epochs', default=50, type=int, help='Number of sweeps over the dataset to train')
-    parser.add_argument('--device', default='cpu', type=str, help='cpu or cuda')
+    parser.add_argument('--device', default='cuda', type=str, help='cpu or cuda')
 
     # args parse
     args = parser.parse_args()
@@ -104,12 +104,12 @@ if __name__ == '__main__':
     device = args.device
 
     # data prepare
-    train_data = utils.CIFAR10Pair(root='data', train=True, transform=utils.train_transform, download=True)
+    train_data = utils.CIFAR10Pair(root='data', train=True, transform=data_transforms.train_transform, download=True)
     train_loader = DataLoader(train_data, batch_size=batch_size, shuffle=True, num_workers=16, pin_memory=True,
                               drop_last=True)
-    memory_data = utils.CIFAR10Pair(root='data', train=True, transform=utils.test_transform, download=True)
+    memory_data = utils.CIFAR10Pair(root='data', train=True, transform=data_transforms.test_transform, download=True)
     memory_loader = DataLoader(memory_data, batch_size=batch_size, shuffle=False, num_workers=16, pin_memory=True)
-    test_data = utils.CIFAR10Pair(root='data', train=False, transform=utils.test_transform, download=True)
+    test_data = utils.CIFAR10Pair(root='data', train=False, transform=data_transforms.test_transform, download=True)
     test_loader = DataLoader(test_data, batch_size=batch_size, shuffle=False, num_workers=16, pin_memory=True)
 
     # model setup and optimizer config

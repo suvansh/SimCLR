@@ -10,7 +10,7 @@ from torch.distributions.categorical import Categorical
 from torchvision.datasets import CIFAR10
 from torch.utils.data import DataLoader, Subset
 from tqdm import tqdm
-from data_transforms import train_transform
+from data_transforms import identity_transform
 
 class DIPCompute:
     def __init__(self, dataloader, save_dir, image_shape, num_loops, iters,
@@ -100,18 +100,19 @@ class DIPCompute:
         for image, target in tqdm(self.dataloader):
             self.run(image.to(self.device))
 
-data = CIFAR10(root=os.path.join(get_repo_dir(), 'data'), train=True, download=True, transform=train_transform)
-#dataloader = DataLoader(data, batch_size=1, shuffle=False, num_workers=4, pin_memory=True, drop_last=True)
+data = CIFAR10(root=os.path.join(get_repo_dir(), 'data'), train=True, download=True, transform=identity_transform)
 save_dir = os.path.join(get_repo_dir(), 'data/transforms')
+os.makedirs(save_dir, exist_ok=True)
 iters = list(range(20, 201, 10)) + list(range(300, 1001, 50)) + list(range(1100, 1601, 100))
 with open(os.path.join(save_dir, 'iter_info.txt'), 'w') as f:
     f.write('Transform Num | DIP Iter Num\n')
     for idx, itr in enumerate(iters):
         f.write(f'{idx+1:4} | {itr:4}\n')
 
-def proc_func(data, idx):
+def proc_func(data_idx, idx):
     """ Apply the DIPCompute transform to DATA and store it. IDX used for multiprocessing. """
-    dataloader = DataLoader(data, batch_size=1, shuffle=False, num_workers=0, pin_memory=True)
+    data_subset = Subset(data, data_idx)
+    dataloader = DataLoader(data_subset, batch_size=1, shuffle=False, num_workers=0, pin_memory=True)
     gpu_num = idx % torch.cuda.device_count()
     comp = DIPCompute(dataloader, save_dir, (3, 32, 32), num_loops=5, iters=iters, input_noise_std=0.03, device=f'cuda:{gpu_num}')
     comp.run_all()
@@ -126,8 +127,8 @@ if __name__ == '__main__':
         for chk in chks:
             results = []
             for chk_idx, chk in enumerate(chks):
-                subset_data = Subset(data, chk)
-                results.append(pool.apply_async(proc_func, (subset_data, chk_idx)))
+                #subset_data = Subset(data, chk)
+                results.append(pool.apply_async(proc_func, (chk, chk_idx)))
             for res in results:
                 res.get()
 
