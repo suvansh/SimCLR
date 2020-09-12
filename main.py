@@ -5,7 +5,7 @@ import pandas as pd
 import torch
 import torch.optim as optim
 from thop import profile, clever_format
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, Subset
 from tqdm import tqdm
 import utils
 import data_transforms
@@ -90,12 +90,18 @@ def test(net, memory_data_loader, test_data_loader, device):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Train SimCLR')
+    
+    parser.add_argument('--transform', required=True, type=str,
+            choices=['default', 'dip', 'gauss', 'randblur'],
+            help='type of train transform')
+    parser.add_argument('--save_dir', default='', type=str, help='save dir')
     parser.add_argument('--feature_dim', default=128, type=int, help='Feature dim for latent vector')
     parser.add_argument('--temperature', default=0.5, type=float, help='Temperature used in softmax')
     parser.add_argument('--k', default=200, type=int, help='Top k most similar images used to predict the label')
     parser.add_argument('--batch_size', default=64, type=int, help='Number of images in each mini-batch')
     parser.add_argument('--epochs', default=50, type=int, help='Number of sweeps over the dataset to train')
     parser.add_argument('--device', default='cuda', type=str, help='cpu or cuda')
+    
 
     # args parse
     args = parser.parse_args()
@@ -103,8 +109,34 @@ if __name__ == '__main__':
     batch_size, epochs = args.batch_size, args.epochs
     device = args.device
 
+    if args.save_dir == '':
+        if args.transform == 'default':
+            save_dir = 'results'
+        else:
+            save_dir = f'results_{args.transform}'
+    else:
+        save_dir = args.save_dir
+    if os.path.isdir(save_dir):
+        if input(f'Save directory {save_dir} exists. Overwrite? (y/N): ').lower() not in ['y', 'yes']:
+            exit()
+    else:
+        os.makedirs(save_dir)
+
+    if args.transform == 'default':
+        transform = data_transforms.train_transform
+    elif args.transform == 'dip':
+        transform = data_transforms.DIP_transform_precomputed
+    elif args.transform == 'gauss':
+        transform = data_transforms.gaussian_blur_transform
+    elif args.transform == 'randblur':
+        transform = data_transforms.random_blur_transform
+    else:
+        raise ValueError('incorrect transform type')
+
     # data prepare
-    train_data = utils.CIFAR10Pair(root='data', train=True, transform=data_transforms.train_transform, download=True)
+    train_data = utils.CIFAR10Pair(root='data', train=True, transform=data_transforms.gaussian_blur_transform, download=True)
+    data_idxs = list(range(len(train_data)//2))  # TODO remove
+    train_data = Subset(train_data, data_idxs)
     train_loader = DataLoader(train_data, batch_size=batch_size, shuffle=True, num_workers=16, pin_memory=True,
                               drop_last=True)
     memory_data = utils.CIFAR10Pair(root='data', train=True, transform=data_transforms.test_transform, download=True)
@@ -123,8 +155,8 @@ if __name__ == '__main__':
     # training loop
     results = {'train_loss': [], 'test_acc@1': [], 'test_acc@5': []}
     save_name_pre = '{}_{}_{}_{}_{}'.format(feature_dim, temperature, k, batch_size, epochs)
-    if not os.path.exists('results'):
-        os.mkdir('results')
+    if not os.path.exists(save_dir):
+        os.mkdir(save_dir)
     best_acc = 0.0
     for epoch in range(1, epochs + 1):
         train_loss = train(model, train_loader, optimizer, device)
@@ -134,7 +166,7 @@ if __name__ == '__main__':
         results['test_acc@5'].append(test_acc_5)
         # save statistics
         data_frame = pd.DataFrame(data=results, index=range(1, epoch + 1))
-        data_frame.to_csv('results/{}_statistics.csv'.format(save_name_pre), index_label='epoch')
+        data_frame.to_csv(f'{save_dir}/{save_name_pre}_statistics.csv', index_label='epoch')
         if test_acc_1 > best_acc:
             best_acc = test_acc_1
-            torch.save(model.state_dict(), 'results/{}_model.pth'.format(save_name_pre))
+            torch.save(model.state_dict(), f'{save_dir}/{save_name_pre}_model.pth')
