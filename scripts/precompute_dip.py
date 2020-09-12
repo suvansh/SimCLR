@@ -1,4 +1,6 @@
 import os
+import pickle
+import shutil
 import multiprocessing as mp
 from utils import get_repo_dir, image_hash, chunk
 from DIP.utils.common_utils import * 
@@ -64,7 +66,13 @@ class DIPCompute:
         self.iter_idx = 0
         hash_ = image_hash(image)
         self.cur_save_dir = os.path.join(self.save_dir, hash_)
-        os.makedirs(self.cur_save_dir, exist_ok=True)
+        # TODO remove. temp modification to resume script after stopping
+        if os.path.isdir(self.cur_save_dir):
+            return False
+        else:
+            os.makedirs(self.cur_save_dir)
+            return True
+        
 
     def save(self, iter_num, np_img):
         transform_num = self.loop_count * len(self.iters) + self.iter_idx
@@ -73,7 +81,8 @@ class DIPCompute:
 
     def run(self, image):
         assert image.shape[1:] == self.image_shape, 'Wrong shape. Expected {}, got {}.'.format(self.image_shape, image.shape[1:])
-        self.before_each_img(image)
+        if not self.before_each_img(image):
+            return
         for self.loop_count in range(self.num_loops):
             # run net for num_iters iterations
             net_input = get_noise(self.input_depth, self.const_input, self.image_shape[1:]).to(self.device)
@@ -103,25 +112,43 @@ class DIPCompute:
 data = CIFAR10(root=os.path.join(get_repo_dir(), 'data'), train=True, download=True, transform=identity_transform)
 save_dir = os.path.join(get_repo_dir(), 'data/transforms')
 os.makedirs(save_dir, exist_ok=True)
+
+#first = True
+#hashes = set()
+#if first:
+#    for im, t in data:
+#        hashes.add(image_hash(im))
+#    assert len(data) == len(hashes), 'colliding hash'
+#    pickle.dump(hashes, open(os.path.join(save_dir, 'hashes.pkl'), 'wb'))
+#else:
+#    hashes_old = pickle.load(open(os.path.join(save_dir, 'hashes.pkl'), 'rb'))
+#    for im, t in data:
+#        hashes.add(hash_ := image_hash(im))
+#        assert hash_ in hashes_old, 'inconsistent hash'
+#import pdb; pdb.set_trace()
+
+
+CONST_NUM_LOOPS = 5
 iters = list(range(20, 201, 10)) + list(range(300, 1001, 50)) + list(range(1100, 1601, 100))
 with open(os.path.join(save_dir, 'iter_info.txt'), 'w') as f:
     f.write('Transform Num | DIP Iter Num\n')
-    for idx, itr in enumerate(iters):
-        f.write(f'{idx+1:4} | {itr:4}\n')
+    for loop in range(CONST_NUM_LOOPS):    
+        for idx, itr in enumerate(iters):
+            f.write(f'{idx+1+loop*len(iters):4} | {itr:4}\n')
 
 def proc_func(data_idx, idx):
     """ Apply the DIPCompute transform to DATA and store it. IDX used for multiprocessing. """
     data_subset = Subset(data, data_idx)
     dataloader = DataLoader(data_subset, batch_size=1, shuffle=False, num_workers=0, pin_memory=True)
-    gpu_num = idx % torch.cuda.device_count()
-    comp = DIPCompute(dataloader, save_dir, (3, 32, 32), num_loops=5, iters=iters, input_noise_std=0.03, device=f'cuda:{gpu_num}')
+    gpu_num = idx % (torch.cuda.device_count() - 1) + 1
+    comp = DIPCompute(dataloader, save_dir, (3, 32, 32), num_loops=CONST_NUM_LOOPS, iters=iters, input_noise_std=0.03, device=f'cuda:{gpu_num}')
     comp.run_all()
 
 
 if __name__ == '__main__':
     mp.set_start_method('spawn')
-    nproc = mp.cpu_count()
-    data_idxs = list(range(len(data)))
+    nproc = 32
+    data_idxs = list(range(len(data)//2, len(data)))  # TODO do other half
     chks = chunk(data_idxs, nproc)
     with mp.Pool(processes=nproc) as pool:
         for chk in chks:

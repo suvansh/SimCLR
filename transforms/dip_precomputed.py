@@ -20,12 +20,12 @@ class DIPTransformPreComputed:
         self.num_transforms = num_transforms
         self.transforms_dir = transforms_dir
         self.transforms_iter_map = {}
-        #with open(transforms_iter_file, 'r') as f:
-        #    f.readline()  # skip header
-        #    while line := f.readline():
-        #        t_num, i_num = line.split(delimiter)
-        #        t_num, i_num = int(t_num.strip()), int(i_num.strip())
-        #        self.transforms_iter_map[t_num] = i_num
+        with open(transforms_iter_file, 'r') as f:
+            f.readline()  # skip header
+            while line := f.readline():
+                t_num, i_num = line.split(delimiter)
+                t_num, i_num = int(t_num.strip()), int(i_num.strip())
+                self.transforms_iter_map[t_num] = i_num
 
     def __call__(self, sample):
         """
@@ -35,7 +35,7 @@ class DIPTransformPreComputed:
         hash_ = image_hash(np_img) 
         t_num = np.random.randint(1, self.num_transforms+1)
         i_num = self.transforms_iter_map[t_num]
-        transform_path = os.path.join(self.transforms_path, hash_, f'{t_num}_{i_num}.npy')
+        transform_path = os.path.join(self.transforms_dir, hash_, f'{t_num:03}_{i_num:04}.npy')
         np_transformed = np.load(transform_path)
-        return np_to_pil(transformed)
+        return np_to_pil(np_transformed)
 

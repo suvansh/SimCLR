@@ -32,8 +32,8 @@ def image_hash(image):
         if len(image.shape) == 3:
             image = torch.unsqueeze(image, 0)
         image = torch_to_np(image)
-    subsampled = image[:, ::4, ::4]
-    hash_ = hash(pickle.dumps(subsampled.tolist()))
+    subsampled = image[:, ::2, ::2]
+    hash_ = hash(tuple(ch.sum() for ch in image))
     return str(abs(hash_))
 
 def chunk(data, parts):
